@@ -1,0 +1,87 @@
+-- ============================================
+-- VIEWS — Latti Coffee House & Deli
+-- ============================================
+
+-- VIEW 1: Resumen de ventas por empleado
+CREATE OR REPLACE VIEW vw_ventas_empleado AS
+SELECT
+    e.employee_id,
+    CONCAT(e.first_name, ' ', e.last_name) AS empleado,
+    e.position                              AS puesto,
+    COUNT(o.order_id)                       AS total_pedidos,
+    SUM(o.total)                            AS ingresos_generados,
+    AVG(o.total)                            AS ticket_promedio
+FROM Employee e
+LEFT JOIN Orders o ON e.employee_id = o.employee_id
+GROUP BY e.employee_id, e.first_name, e.last_name, e.position;
+
+-- VIEW 2: Productos más vendidos
+CREATE OR REPLACE VIEW vw_productos_populares AS
+SELECT
+    p.product_id,
+    p.name        AS producto,
+    p.category    AS categoria,
+    p.price       AS precio,
+    COUNT(o.order_id) AS veces_pedido,
+    SUM(o.total)      AS ingresos_totales
+FROM Product p
+LEFT JOIN Orders o ON p.product_id = o.product_id
+GROUP BY p.product_id, p.name, p.category, p.price
+ORDER BY veces_pedido DESC;
+
+-- VIEW 3: Estado actual de mesas
+CREATE OR REPLACE VIEW vw_estado_mesas AS
+SELECT
+    t.table_id,
+    t.table_number  AS numero_mesa,
+    t.capacity      AS capacidad,
+    t.location      AS ubicacion,
+    t.status        AS estado,
+    r.date_time     AS proxima_reservacion,
+    c.full_name     AS cliente_reserva
+FROM TableCafe t
+LEFT JOIN Reservation r ON t.table_id = r.table_id
+    AND r.status IN ('confirmed','pending')
+    AND r.date_time >= NOW()
+LEFT JOIN Customer c ON r.customer_id = c.customer_id;
+
+-- VIEW 4: Insumos con stock bajo
+CREATE OR REPLACE VIEW vw_stock_critico AS
+SELECT
+    su.supply_id,
+    su.name          AS insumo,
+    su.unit          AS unidad,
+    su.current_stock AS stock_actual,
+    su.minimum_stock AS stock_minimo,
+    (su.current_stock - su.minimum_stock) AS diferencia,
+    sp.company_name  AS proveedor,
+    sp.phone         AS telefono_proveedor
+FROM Supply su
+JOIN Supplier sp ON su.supplier_id = sp.supplier_id
+WHERE su.current_stock <= su.minimum_stock * 1.2
+ORDER BY diferencia ASC;
+
+-- VIEW 5: Ingresos diarios con método de pago
+CREATE OR REPLACE VIEW vw_ingresos_diarios AS
+SELECT
+    DATE(p.date_time)    AS fecha,
+    p.payment_method     AS metodo_pago,
+    COUNT(p.payment_id)  AS num_transacciones,
+    SUM(p.amount)        AS total_recaudado
+FROM Payment p
+GROUP BY DATE(p.date_time), p.payment_method
+ORDER BY fecha DESC;
+
+-- VIEW 6: Clientes frecuentes con gasto total
+CREATE OR REPLACE VIEW vw_clientes_frecuentes AS
+SELECT
+    c.customer_id,
+    c.full_name     AS cliente,
+    c.email,
+    COUNT(o.order_id)  AS total_visitas,
+    SUM(o.total)       AS gasto_total,
+    MAX(o.date_time)   AS ultima_visita
+FROM Customer c
+LEFT JOIN Orders o ON c.customer_id = o.customer_id
+GROUP BY c.customer_id, c.full_name, c.email
+ORDER BY gasto_total DESC;
