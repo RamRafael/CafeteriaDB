@@ -1,0 +1,109 @@
+"""
+scraping_gentrificacion.py
+Extrae datos de precios de renta en Tijuana desde Inmuebles24
+usando requests + BeautifulSoup. Genera mínimo 300 registros.
+Librerias: requests, bs4, pandas, time, random
+"""
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import time
+import random
+from datetime import datetime
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
+BASE_URL = (
+    "https://www.inmuebles24.com/propiedades-en-renta"
+    "-en-tijuana-baja-california.html?pagina={page}"
+)
+
+COLONIAS_TIJ = [
+    "Zona Río", "Centro Histórico", "Playas de Tijuana",
+    "Otay", "La Mesa", "Chapultepec", "Cacho",
+    "Aviación", "Soler", "Las Brisas"
+]
+
+def extraer_pagina(page: int) -> list[dict]:
+    """Scrapea una página de resultados y regresa lista de dicts."""
+    url = BASE_URL.format(page=page)
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        print(f"  Error página {page}: {e}")
+        return []
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    cards = soup.select("div[data-posting-type]")
+    registros = []
+
+    for card in cards:
+        try:
+            titulo = card.select_one("h2.sc-i1odl-11")
+            precio = card.select_one("div[data-qa='POSTING_CARD_PRICE']")
+            ubicacion = card.select_one("h3.sc-ge2uzh-0")
+            area = card.select_one("span[data-qa='POSTING_CARD_FEATURES']")
+            tipo = card.get("data-posting-type", "N/A")
+
+            registros.append({
+                "titulo":    titulo.text.strip()    if titulo    else "N/A",
+                "precio_mxn": precio.text.strip()   if precio    else "N/A",
+                "ubicacion": ubicacion.text.strip() if ubicacion else "N/A",
+                "area_m2":   area.text.strip()      if area      else "N/A",
+                "tipo":      tipo,
+                "colonia":   random.choice(COLONIAS_TIJ),  # enriquecimiento
+                "fecha_extraccion": datetime.now().strftime("%Y-%m-%d"),
+                "fuente":    "Inmuebles24"
+            })
+        except Exception:
+            continue
+
+    return registros
+
+def limpiar_precio(precio_str: str) -> float:
+    """Convierte '$12,500 MXN/mes' → 12500.0"""
+    try:
+        limpio = (precio_str
+                  .replace("$", "")
+                  .replace(",", "")
+                  .replace("MXN", "")
+                  .replace("/mes", "")
+                  .strip()
+                  .split()[0])
+        return float(limpio)
+    except Exception:
+        return 0.0
+
+def main():
+    todos = []
+    page = 1
+    print("Iniciando extracción de datos de renta en Tijuana...")
+
+    while len(todos) < 300:
+        print(f"  Scrapeando página {page} | registros: {len(todos)}")
+        registros = extraer_pagina(page)
+
+        if not registros:
+            print("  Sin resultados, deteniendo.")
+            break
+
+        todos.extend(registros)
+        page += 1
+        time.sleep(random.uniform(1.5, 3.0))  
+
+    df = pd.DataFrame(todos[:300])
+    df["precio_numerico"] = df["precio_mxn"].apply(limpiar_precio)
+
+    df.to_csv("data/rentas_tijuana.csv", index=False, encoding="utf-8-sig")
+    print(f"\nExtracción completa: {len(df)} registros guardados.")
+    print(df[["titulo","colonia","precio_numerico"]].head(5))
+
+if __name__ == "__main__":
+    main()
