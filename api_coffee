@@ -1,0 +1,87 @@
+"""
+api_cafeterias.py
+Extrae cafeterías en Tijuana usando Foursquare Places API.
+Endpoint: GET /v3/places/search
+Librerias: requests, pandas, os, dotenv
+Requiere: FOURSQUARE_API_KEY en .env
+"""
+import requests
+import pandas as pd
+import os
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
+API_KEY = os.getenv("FOURSQUARE_API_KEY")
+
+BASE_URL = "https://api.foursquare.com/v3/places/search"
+
+ZONAS_TIJUANA = [
+    {"nombre": "Zona Río",          "ll": "32.5149,-117.0382"},
+    {"nombre": "Centro Histórico",  "ll": "32.5273,-117.0356"},
+    {"nombre": "Playas de Tijuana", "ll": "32.5200,-117.1200"},
+    {"nombre": "Otay",              "ll": "32.5400,-116.9800"},
+    {"nombre": "La Mesa",           "ll": "32.5100,-116.9700"},
+    {"nombre": "Chapultepec",       "ll": "32.5300,-117.0100"},
+    {"nombre": "Cacho",             "ll": "32.5250,-117.0200"},
+]
+
+CATEGORIAS = "13032,13063"  # Coffee shop, Café
+
+def buscar_cafeterias(zona: dict, limit: int = 50) -> list[dict]:
+    """Busca cafeterías en una zona de Tijuana."""
+    headers = {
+        "Accept": "application/json",
+        "Authorization": API_KEY
+    }
+    params = {
+        "ll":         zona["ll"],
+        "categories": CATEGORIAS,
+        "radius":     2000,
+        "limit":      limit,
+        "fields":     "name,location,rating,price,stats,hours,website"
+    }
+    try:
+        resp = requests.get(BASE_URL, headers=headers, params=params, timeout=15)
+        resp.raise_for_status()
+        places = resp.json().get("results", [])
+    except requests.RequestException as e:
+        print(f"  Error en zona {zona['nombre']}: {e}")
+        return []
+
+    registros = []
+    for p in places:
+        loc = p.get("location", {})
+        registros.append({
+            "nombre":          p.get("name", "N/A"),
+            "zona":            zona["nombre"],
+            "direccion":       loc.get("formatted_address", "N/A"),
+            "colonia":         loc.get("neighborhood", "N/A"),
+            "rating":          p.get("rating", None),
+            "precio_nivel":    p.get("price", None),  # 1-4
+            "total_check_ins": p.get("stats", {}).get("total_checkins", 0),
+            "abierto_ahora":   p.get("hours", {}).get("open_now", None),
+            "website":         p.get("website", "N/A"),
+            "fuente":          "Foursquare API",
+        })
+    return registros
+
+def main():
+    todos = []
+    print("Extrayendo cafeterías en Tijuana via Foursquare Places API...")
+
+    for zona in ZONAS_TIJUANA:
+        print(f"  Zona: {zona['nombre']}")
+        registros = buscar_cafeterias(zona)
+        todos.extend(registros)
+        print(f"    → {len(registros)} cafeterías encontradas")
+        time.sleep(1.0)
+
+    df = pd.DataFrame(todos)
+    df.drop_duplicates(subset=["nombre", "direccion"], inplace=True)
+    df.to_csv("data/cafeterias_tijuana.csv", index=False, encoding="utf-8-sig")
+    print(f"\nTotal registros únicos: {len(df)}")
+    print(df[["nombre","zona","rating","precio_nivel"]].head(10))
+
+if __name__ == "__main__":
+    main()
