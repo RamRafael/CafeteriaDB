@@ -24,7 +24,7 @@ CafeteriaProject/
 ├── scraper_tijuana.py      # ETL: scrapes rental listings from Vivanuncios.com.mx
 ├── dashboard.py            # Streamlit page rendering module
 ├── main.py                 # Streamlit entry point
-├── CafeteriaDB_final.sql   # Full database schema, procedures, triggers and views
+├── CafeteriaFinalVersion.sql   # Full database schema, procedures, triggers and views
 ├── data/                   # Generated CSV files (created at runtime)
 │   ├── banxico_series.csv
 │   ├── tijuana_mn.csv
